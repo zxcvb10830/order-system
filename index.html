@@ -1,8 +1,142 @@
-<script>
-const BIN_ID = 'dQO-AcClixZAByGeTrbfs';
-const WRITE_KEY = 'kj_w_e-MYRs8alILUk1G0qkmqLHOedWdv27bCvLWAULspVqg';
-const API_BASE = 'https://keepjson.fourlegs.workers.dev/bins';
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>點餐系統（Firebase 永久版）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+  const firebaseConfig = {
+    apiKey: "AIzaSyBbdNOkiHgZPr8Rvp1GWa-mQyrjmYhQtoc",
+    authDomain: "ordering-online-59bc9.firebaseapp.com",
+    projectId: "ordering-online-59bc9",
+    storageBucket: "ordering-online-59bc9.firebasestorage.app",
+    messagingSenderId: "183105769152",
+    appId: "1:183105769152:web:edc109bbc8cd110846e725",
+    measurementId: "G-YD10EXS3S0"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const docRef = doc(db, "orders", "current");
+
+  window.db = db;
+  window.docRef = docRef;
+  window.getDoc = getDoc;
+  window.setDoc = setDoc;
+  window.onSnapshot = onSnapshot;
+
+  // 初始載入 + 即時監聽
+  onSnapshot(docRef, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      window.foods = data.foods || [];
+      window.drinks = data.drinks || [];
+      window.quickMenu = data.quickMenu || [];
+      window.members = data.members || ["小明", "小華"];
+    } else {
+      window.foods = [];
+      window.drinks = [];
+      window.quickMenu = [];
+      window.members = ["小明", "小華"];
+    }
+    [...window.foods, ...window.drinks].forEach(item => {
+      if (!item.people) item.people = [];
+      item.qty = item.people.length;
+    });
+    if (window.renderAll) window.renderAll();
+    const status = document.getElementById("syncStatus");
+    if (status) status.textContent = "已同步 " + new Date().toLocaleTimeString();
+  });
+</script>
+<style>
+  body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f8fafc; }
+  .card { background: white; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; }
+  .btn { border-radius: 10px; font-weight: 600; transition: all 0.15s; }
+  .btn:active { transform: scale(0.97); }
+  .item-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; transition: all 0.2s; }
+  .item-card.drag-over { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+  .name-chip { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 9999px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: #334155; cursor: grab; user-select: none; display: inline-flex; align-items: center; gap: 4px; }
+  .name-chip:active { cursor: grabbing; }
+  .person-line { background: #f8fafc; border-radius: 8px; padding: 6px 8px; margin-top: 6px; font-size: 12px; }
+  .opt { font-size: 11px; margin-right: 6px; }
+  .opt input { margin-right: 2px; accent-color: #3b82f6; }
+</style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+  <div class="max-w-6xl mx-auto">
+    <header class="card p-5 mb-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800">點餐系統</h1>
+          <p class="text-sm text-slate-500 mt-0.5">Firebase 永久版 · 拖曳右下角的人員到商品上綁定</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="syncStatus" class="text-xs text-slate-500">連線中...</span>
+        </div>
+      </div>
+      <div id="statusSummary" class="mt-3 text-sm text-slate-600">目前還沒人點</div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div class="lg:col-span-2 card p-5">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-semibold text-slate-800">食物</h2>
+          <button onclick="addItem('food')" class="btn bg-emerald-500 text-white px-3 py-1.5 text-sm">+ 新增</button>
+        </div>
+        <div id="foodList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="text-lg font-semibold text-slate-800 mb-1">快速點餐</h2>
+        <p class="text-xs text-slate-500 mb-3">食物綠色 / 飲料藍色</p>
+        <div id="quickMenu" class="grid grid-cols-2 gap-2 mb-4"></div>
+        <div class="border-t pt-3 space-y-2">
+          <input id="newMenuName" type="text" placeholder="品項名稱" class="w-full border rounded-lg px-3 py-2 text-sm">
+          <input id="newMenuPrice" type="number" placeholder="價格" class="w-full border rounded-lg px-3 py-2 text-sm">
+          <select id="newMenuType" class="w-full border rounded-lg px-3 py-2 text-sm">
+            <option value="food">食物</option>
+            <option value="drink">飲料</option>
+          </select>
+          <button onclick="addQuickMenu()" class="btn w-full bg-slate-800 text-white py-2 text-sm">加入</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5 mt-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold text-slate-800">飲料</h2>
+        <button onclick="addItem('drink')" class="btn bg-sky-500 text-white px-3 py-1.5 text-sm">+ 新增</button>
+      </div>
+      <div id="drinkList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-5">
+      <div class="lg:col-span-2"></div>
+      <div class="card p-5">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-semibold text-slate-800">人員</h3>
+          <div class="flex gap-1">
+            <input id="newMember" type="text" placeholder="新增" class="w-24 border rounded-lg px-2 py-1 text-sm">
+            <button onclick="addMember()" class="btn bg-slate-700 text-white px-2 py-1 text-sm">+</button>
+          </div>
+        </div>
+        <div id="membersList" class="min-h-[60px]"></div>
+        <p class="text-xs text-slate-400 mt-2">拖曳到商品上綁定，可重複使用</p>
+      </div>
+    </div>
+
+    <div class="mt-5 card p-4 text-center">
+      <div class="text-sm text-slate-500">總金額</div>
+      <div id="totalAmount" class="text-4xl font-bold text-slate-800 my-1">$0</div>
+      <button onclick="clearAll()" class="btn bg-red-500 text-white px-4 py-2 text-sm mt-2">清空全部</button>
+    </div>
+  </div>
+
+<script>
 const ICE_OPTS = ['微冰','少冰','正常','熱'];
 const SUGAR_OPTS = ['無糖','微糖','半糖'];
 
@@ -12,68 +146,54 @@ let quickMenu = [];
 let members = ['小明','小華'];
 let isSaving = false;
 
-async function loadFromServer() {
-  try {
-    document.getElementById('syncStatus').textContent = '更新中...';
-    const res = await fetch(`${API_BASE}/${BIN_ID}`);
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    foods = data.foods || [];
-    drinks = data.drinks || [];
-    quickMenu = data.quickMenu || [];
-    members = data.members || members;
-    
-    // 確保每樣商品的 qty 與 people 數量同步
-    [...foods, ...drinks].forEach(item => {
-      if (!item.people) item.people = [];
-      item.qty = item.people.length; // 未綁定為0，綁幾個人就自動+1
-    });
+window.foods = foods;
+window.drinks = drinks;
+window.quickMenu = quickMenu;
+window.members = members;
 
-    renderAll();
-    document.getElementById('syncStatus').textContent = '已更新 ' + new Date().toLocaleTimeString();
-  } catch(e) {
-    document.getElementById('syncStatus').textContent = '更新失敗';
-  }
-}
-
-async function saveToServer() {
-  if (isSaving) return;
+async function saveToFirebase() {
+  if (isSaving || !window.setDoc || !window.docRef) return;
   isSaving = true;
   try {
-    await fetch(`${API_BASE}/${BIN_ID}`, {
-      method:'PUT',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${WRITE_KEY}`},
-      body:JSON.stringify({foods, drinks, quickMenu, members})
+    await window.setDoc(window.docRef, {
+      foods: window.foods,
+      drinks: window.drinks,
+      quickMenu: window.quickMenu,
+      members: window.members
     });
-    document.getElementById('syncStatus').textContent = '已儲存 ' + new Date().toLocaleTimeString();
   } catch(e) {
+    console.error(e);
     document.getElementById('syncStatus').textContent = '儲存失敗';
-  } finally { isSaving = false; }
+  } finally {
+    isSaving = false;
+  }
 }
 
 function calculateTotal() {
   let t = 0;
-  [...foods,...drinks].forEach(i => {
-    i.qty = (i.people || []).length; // 強制以綁定人數計算總額
-    t += (i.qty)*(i.price||0);
+  [...window.foods, ...window.drinks].forEach(i => {
+    i.qty = (i.people || []).length;
+    t += i.qty * (i.price || 0);
   });
   document.getElementById('totalAmount').textContent = `$${t}`;
   return t;
 }
 
 function updateStatus() {
-  const all = [...foods,...drinks].filter(i=>i.name && (i.people||[]).length > 0);
+  const all = [...window.foods, ...window.drinks].filter(i => i.name && (i.people||[]).length > 0);
   const el = document.getElementById('statusSummary');
-  el.textContent = all.length ? all.map(i => {
-    const names = (i.people||[]).map(p => typeof p==='string'?p:p.name).join(',') || '未綁';
-    return `${i.name} x${i.qty} (${names})`;
-  }).join(' | ') : '目前還沒人點';
+  el.textContent = all.length
+    ? all.map(i => {
+        const names = (i.people||[]).map(p => typeof p==='string' ? p : p.name).join(',') || '未綁';
+        return `${i.name} x${(i.people||[]).length} (${names})`;
+      }).join(' · ')
+    : '目前還沒人點';
   calculateTotal();
 }
 
 function renderItem(item, type, index, container) {
   const card = document.createElement('div');
-  card.className = 'item-card p-2';
+  card.className = 'item-card p-3';
   card.ondragover = e => { e.preventDefault(); card.classList.add('drag-over'); };
   card.ondragleave = () => card.classList.remove('drag-over');
   card.ondrop = e => {
@@ -81,88 +201,80 @@ function renderItem(item, type, index, container) {
     card.classList.remove('drag-over');
     const name = e.dataTransfer.getData('text/plain');
     if (!name) return;
-    const list = type==='food'?foods:drinks;
+    const list = type === 'food' ? window.foods : window.drinks;
     if (!list[index].people) list[index].people = [];
-    const exists = list[index].people.some(p => (typeof p==='string'?p:p.name) === name);
+    const exists = list[index].people.some(p => (typeof p === 'string' ? p : p.name) === name);
     if (!exists) {
       if (type === 'drink') {
-        list[index].people.push({name, ice:['正常'], sugar:['正常']});
+        list[index].people.push({ name, ice: [], sugar: [] });
       } else {
         list[index].people.push(name);
       }
-      list[index].qty = list[index].people.length; // 自動 +1
-      saveToServer();
+      list[index].qty = list[index].people.length;
+      saveToFirebase();
       renderAll();
     }
   };
 
   let peopleHtml = '';
-  if (type === 'drink' && item.people && item.people.length) {
-    peopleHtml = item.people.map((p, pi) => {
-      const iceChecks = ICE_OPTS.map(o => `<label class="opt-label"><input type="checkbox" ${p.ice.includes(o)?'checked':''} onchange="toggleOpt('drink',${index},${pi},'ice','${o}')">${o}</label>`).join('');
-      const sugarChecks = SUGAR_OPTS.map(o => `<label class="opt-label"><input type="checkbox" ${p.sugar.includes(o)?'checked':''} onchange="toggleOpt('drink',${index},${pi},'sugar','${o}')">${o}</label>`).join('');
-      return `<div class="person-row flex justify-between items-center">
-        <div>
+  const people = item.people || [];
+  if (type === 'drink' && people.length) {
+    peopleHtml = people.map((p, pi) => {
+      const ice = ICE_OPTS.map(o => `<label class="opt"><input type="checkbox" ${(p.ice||[]).includes(o) ? 'checked' : ''} onchange="toggleOpt(${index},${pi},'ice','${o}')">${o}</label>`).join('');
+      const sugar = SUGAR_OPTS.map(o => `<label class="opt"><input type="checkbox" ${(p.sugar||[]).includes(o) ? 'checked' : ''} onchange="toggleOpt(${index},${pi},'sugar','${o}')">${o}</label>`).join('');
+      return `<div class="person-line">
+        <div class="flex justify-between items-center">
           <strong>${p.name}</strong>
-          <div>冰：${iceChecks}</div>
-          <div>糖：${sugarChecks}</div>
+          <button onclick="removePerson('${type}',${index},${pi})" class="text-red-500 text-xs">✕</button>
         </div>
-        <button onclick="removePersonFromItem('${type}', ${index}, ${pi})" class="text-red-500 font-bold ml-2 px-1">✕</button>
+        <div>冰：${ice}</div>
+        <div>糖：${sugar}</div>
       </div>`;
     }).join('');
-  } else if (item.people && item.people.length) {
-    peopleHtml = item.people.map((p, pi) => {
-      const pName = typeof p==='string'?p:p.name;
-      return `<span class="bound-tag inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-amber-200 mr-1 mb-1 text-xs">
-        ${pName}
-        <button onclick="removePersonFromItem('${type}', ${index}, ${pi})" class="text-red-500 font-bold">×</button>
+  } else if (people.length) {
+    peopleHtml = people.map((p, pi) => {
+      const n = typeof p === 'string' ? p : p.name;
+      return `<span class="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded-full mr-1 mb-1">
+        ${n}
+        <button onclick="removePerson('${type}',${index},${pi})" class="text-red-500">×</button>
       </span>`;
-    }).join(' ');
+    }).join('');
   } else {
-    peopleHtml = '<span class="text-gray-400 text-xs">拖曳人員到這裡 (數量: 0)</span>';
+    peopleHtml = '<div class="text-slate-400 text-xs mt-1">拖曳人員到這裡（數量 0）</div>';
   }
 
   card.innerHTML = `
-    <div class="flex gap-1 items-start">
+    <div class="flex justify-between items-start gap-2">
       <div class="flex-1">
-        <input type="text" value="${item.name||''}" placeholder="品項" onchange="updateField('${type}',${index},'name',this.value)" class="w-full px-1 py-0.5 text-sm font-bold mb-1 border rounded">
-        <div class="flex gap-2 items-center text-xs text-amber-900">
-          <span>單價: $<input type="number" value="${item.price||0}" min="0" onchange="updateField('${type}',${index},'price',parseInt(this.value)||0)" class="w-14 px-1 py-0.5 border rounded"></span>
-          <span class="font-bold text-orange-600">數量: ${item.people ? item.people.length : 0}</span>
+        <input type="text" value="${item.name||''}" placeholder="品項名稱" onchange="updateField('${type}',${index},'name',this.value)" class="w-full border rounded-lg px-2 py-1 text-sm font-medium mb-2">
+        <div class="flex items-center gap-3 text-xs text-slate-600">
+          <span>單價 <input type="number" value="${item.price||0}" min="0" onchange="updateField('${type}',${index},'price',parseInt(this.value)||0)" class="w-16 border rounded px-1 py-0.5"></span>
+          <span class="font-semibold text-slate-800">數量 ${people.length}</span>
         </div>
       </div>
-      <button onclick="removeItem('${type}',${index})" class="text-red-600 text-xs">刪除品項</button>
+      <button onclick="removeItem('${type}',${index})" class="text-red-500 text-xs shrink-0">刪除</button>
     </div>
-    <div class="mt-1">${peopleHtml}</div>
+    <div class="mt-2">${peopleHtml}</div>
   `;
   container.appendChild(card);
-}
-
-// 移除綁定人員並自動 -1
-function removePersonFromItem(type, itemIndex, personIndex) {
-  const list = type === 'food' ? foods : drinks;
-  list[itemIndex].people.splice(personIndex, 1);
-  list[itemIndex].qty = list[itemIndex].people.length;
-  saveToServer();
-  renderAll();
 }
 
 function renderList(list, id, type) {
   const c = document.getElementById(id);
   c.innerHTML = '';
-  list.forEach((item,i) => renderItem(item, type, i, c));
+  list.forEach((item, i) => renderItem(item, type, i, c));
 }
 
 function renderQuickMenu() {
   const c = document.getElementById('quickMenu');
   c.innerHTML = '';
-  quickMenu.forEach((item,i) => {
-    const color = item.type === 'drink' ? 'ms-btn-blue' : 'ms-btn-green';
+  (window.quickMenu || []).forEach((item, i) => {
+    const bg = item.type === 'drink' ? 'bg-sky-500' : 'bg-emerald-500';
     const wrap = document.createElement('div');
     wrap.className = 'relative';
     wrap.innerHTML = `
-      <button class="ms-btn ${color} w-full py-1.5 text-xs font-bold" onclick="addFromMenu(${i})">${item.name} $${item.price}</button>
-      <span class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center cursor-pointer" onclick="removeQuick(${i})">×</span>
+      <button class="btn ${bg} text-white w-full py-2 text-xs" onclick="addFromMenu(${i})">${item.name} $${item.price}</button>
+      <button onclick="removeQuick(${i})" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs leading-none">×</button>
     `;
     c.appendChild(wrap);
   });
@@ -171,98 +283,115 @@ function renderQuickMenu() {
 function renderMembers() {
   const c = document.getElementById('membersList');
   c.innerHTML = '';
-  members.forEach((name,i) => {
-    const b = document.createElement('div');
-    b.className = 'name-block';
-    b.draggable = true;
-    b.textContent = name;
-    b.ondragstart = e => { e.dataTransfer.setData('text/plain', name); b.style.opacity='0.5'; };
-    b.ondragend = () => b.style.opacity='1';
-    b.ondblclick = () => { if(confirm(`刪除 ${name}?`)) { members.splice(i,1); saveToServer(); renderMembers(); } };
-    c.appendChild(b);
+  (window.members || []).forEach((name, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'name-chip';
+    chip.draggable = true;
+    chip.textContent = name;
+    chip.ondragstart = e => { e.dataTransfer.setData('text/plain', name); chip.style.opacity = '0.5'; };
+    chip.ondragend = () => chip.style.opacity = '1';
+    chip.ondblclick = () => {
+      if (confirm(`刪除 ${name}？`)) {
+        window.members.splice(i, 1);
+        saveToFirebase();
+        renderMembers();
+      }
+    };
+    c.appendChild(chip);
   });
 }
 
 function renderAll() {
-  renderList(foods,'foodList','food');
-  renderList(drinks,'drinkList','drink');
+  foods = window.foods || [];
+  drinks = window.drinks || [];
+  quickMenu = window.quickMenu || [];
+  members = window.members || [];
+  renderList(foods, 'foodList', 'food');
+  renderList(drinks, 'drinkList', 'drink');
   renderQuickMenu();
   renderMembers();
   updateStatus();
 }
+window.renderAll = renderAll;
 
 function updateField(type, index, field, value) {
-  const list = type==='food'?foods:drinks;
+  const list = type === 'food' ? window.foods : window.drinks;
   list[index][field] = value;
-  saveToServer();
+  saveToFirebase();
   updateStatus();
 }
 
-function toggleOpt(type, index, pIndex, cat, opt) {
-  const list = drinks;
-  const p = list[index].people[pIndex];
+function toggleOpt(index, pIndex, cat, opt) {
+  const p = window.drinks[index].people[pIndex];
   if (!p[cat]) p[cat] = [];
-  const idx = p[cat].indexOf(opt);
-  if (idx >= 0) p[cat].splice(idx,1);
+  const i = p[cat].indexOf(opt);
+  if (i >= 0) p[cat].splice(i, 1);
   else p[cat].push(opt);
-  saveToServer();
+  saveToFirebase();
 }
 
-function addItem(type, name='', price=0) {
+function removePerson(type, itemIndex, personIndex) {
+  const list = type === 'food' ? window.foods : window.drinks;
+  list[itemIndex].people.splice(personIndex, 1);
+  list[itemIndex].qty = list[itemIndex].people.length;
+  saveToFirebase();
+  renderAll();
+}
+
+function addItem(type, name = '', price = 0) {
   const item = { name, price, qty: 0, people: [] };
-  (type==='food'?foods:drinks).push(item);
-  saveToServer();
+  (type === 'food' ? window.foods : window.drinks).push(item);
+  saveToFirebase();
   renderAll();
 }
 
 function removeItem(type, index) {
-  (type==='food'?foods:drinks).splice(index,1);
-  saveToServer();
+  (type === 'food' ? window.foods : window.drinks).splice(index, 1);
+  saveToFirebase();
   renderAll();
 }
 
 function addFromMenu(idx) {
-  // 點擊快速選單時，預設新增一個品項並帶入價格
-  const m = quickMenu[idx];
+  const m = window.quickMenu[idx];
   addItem(m.type, m.name, m.price);
 }
 
 function addQuickMenu() {
   const name = document.getElementById('newMenuName').value.trim();
-  const price = parseInt(document.getElementById('newMenuPrice').value)||0;
-  const type = document.getElementById('newMenuType`').value;
+  const price = parseInt(document.getElementById('newMenuPrice').value) || 0;
+  const type = document.getElementById('newMenuType').value;
   if (!name) return;
-  quickMenu.push({name, price, type});
-  document.getElementById('newMenuName').value='';
-  document.getElementById('newMenuPrice').value='';
-  saveToServer();
+  if (!window.quickMenu) window.quickMenu = [];
+  window.quickMenu.push({ name, price, type });
+  document.getElementById('newMenuName').value = '';
+  document.getElementById('newMenuPrice').value = '';
+  saveToFirebase();
   renderQuickMenu();
 }
 
 function removeQuick(i) {
-  quickMenu.splice(i,1);
-  saveToServer();
+  window.quickMenu.splice(i, 1);
+  saveToFirebase();
   renderQuickMenu();
 }
 
 function addMember() {
-  const name = document.getElementById('newMember').value.Rtrim ? document.getElementById('newMember').value.trim() : document.getElementById('newMember').value.trim();
-  if (!name || members.includes(name)) return;
-  members.push(name);
-  document.getElementById('newMember').value='';
-  saveToServer();
+  const name = document.getElementById('newMember').value.trim();
+  if (!name || window.members.includes(name)) return;
+  window.members.push(name);
+  document.getElementById('newMember').value = '';
+  saveToFirebase();
   renderMembers();
 }
 
 function clearAll() {
-  if (confirm('確定清空所有品項與點餐紀錄？')) {
-    foods=[]; drinks=[];
-    saveToServer();
+  if (confirm('確定清空全部？')) {
+    window.foods = [];
+    window.drinks = [];
+    saveToFirebase();
     renderAll();
   }
 }
-
-// 每 3 秒自動輪詢雲端，讓大家的手機保持即時同步
-setInterval(loadFromServer, 3000);
-loadFromServer();
 </script>
+</body>
+</html>
