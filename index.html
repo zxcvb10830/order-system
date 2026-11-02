@@ -27,7 +27,6 @@
   window.getDoc = getDoc;
   window.setDoc = setDoc;
 
-  // 載入資料
   async function loadData() {
     try {
       const snap = await getDoc(docRef);
@@ -40,7 +39,9 @@
       }
       [...(window.foods||[]), ...(window.drinks||[])].forEach(item => {
         if (!item.people) item.people = [];
-        item.qty = item.people.length;
+        if (item.manual !== true) {
+          item.qty = item.people.length;
+        }
       });
       if (window.renderAll) window.renderAll();
       document.getElementById("syncStatus").textContent = "已載入 " + new Date().toLocaleTimeString();
@@ -53,7 +54,6 @@
   window.loadData = loadData;
   loadData();
 
-  // 即時監聽（可選）
   onSnapshot(docRef, (snap) => {
     if (snap.exists() && !window.isSaving) {
       const data = snap.data();
@@ -63,87 +63,140 @@
       window.members = data.members || ["小明", "小華"];
       [...window.foods, ...window.drinks].forEach(item => {
         if (!item.people) item.people = [];
-        item.qty = item.people.length;
+        if (item.manual !== true) {
+          item.qty = item.people.length;
+        }
       });
       if (window.renderAll) window.renderAll();
     }
   });
 </script>
 <style>
-  body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
-  .card { background: white; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
-  .btn { border-radius: 10px; font-weight: 600; }
-  .item-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; }
-  .item-card.drag-over { border-color: #3b82f6; background: #eff6ff; }
-  .name-chip { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 9999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: grab; display: inline-block; margin: 2px; }
-  .person-line { background: #f8fafc; border-radius: 8px; padding: 6px 8px; margin-top: 6px; font-size: 12px; }
+  @import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+  body {
+    font-family: 'SF Pro Display', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+  }
+  .card {
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    border: 1px solid #e5e5ea;
+  }
+  .btn {
+    border-radius: 980px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .item-card {
+    background: #ffffff;
+    border: 1px solid #e5e5ea;
+    border-radius: 16px;
+    transition: all 0.2s;
+  }
+  .item-card.drag-over {
+    border-color: #0071e3;
+    background: #f0f7ff;
+    box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
+  }
+  .name-chip {
+    background: #1d1d1f;
+    border: none;
+    border-radius: 980px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #ffffff;
+    cursor: grab;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px;
+    transition: all 0.15s;
+  }
+  .name-chip:hover { background: #333336; }
+  .name-chip:active { cursor: grabbing; }
+  .person-line {
+    background: #f5f5f7;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+  .opt input { accent-color: #0071e3; margin-right: 4px; }
+  .edit-qty { display: none; }
+  .edit-qty.active { display: flex; }
 </style>
 </head>
-<body class="min-h-screen p-4">
-  <div class="max-w-6xl mx-auto">
-    <header class="card p-5 mb-5">
-      <div class="flex justify-between items-center">
+<body class="min-h-screen">
+  <div class="w-full max-w-none px-4 md:px-8 py-6">
+    <header class="card p-6 md:p-8 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-bold">點餐系統</h1>
-          <p class="text-sm text-slate-500">拖曳人員到商品上綁定</p>
+          <h1 class="text-4xl md:text-5xl font-semibold tracking-tight">點餐系統</h1>
+          <p class="text-sm text-gray-500 mt-2">拖曳人員綁定 · 數量自動計算</p>
         </div>
-        <div class="flex items-center gap-2">
-          <button onclick="loadData()" class="btn bg-slate-900 text-white px-3 py-1 text-sm">重新載入</button>
-          <span id="syncStatus" class="text-xs text-slate-500">連線中...</span>
+        <div class="flex items-center gap-3">
+          <button onclick="loadData()" class="btn bg-[#0071e3] text-white px-5 py-2 text-sm">重新載入</button>
+          <span id="syncStatus" class="text-xs text-gray-500">連線中...</span>
         </div>
       </div>
-      <div id="statusSummary" class="mt-2 text-sm text-slate-600">目前還沒人點</div>
+      <div id="statusSummary" class="mt-5 text-sm text-gray-600">目前還沒人點</div>
     </header>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div class="lg:col-span-2 card p-4">
-        <div class="flex justify-between mb-3">
-          <h2 class="font-semibold">食物</h2>
-          <button onclick="addItem('food')" class="btn bg-emerald-500 text-white px-3 py-1 text-sm">+ 新增</button>
-        </div>
-        <div id="foodList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    <div class="card p-6 md:p-8 mb-6">
+      <div class="flex justify-between items-center mb-5">
+        <h2 class="text-2xl font-semibold">快速點餐</h2>
+        <span class="text-xs text-gray-400">食物綠 · 飲料藍</span>
       </div>
-      <div class="card p-4">
-        <h2 class="font-semibold mb-2">快速點餐</h2>
-        <div id="quickMenu" class="grid grid-cols-2 gap-2 mb-3"></div>
-        <div class="border-t pt-2 space-y-1">
-          <input id="newMenuName" placeholder="品項名稱" class="w-full border rounded px-2 py-1 text-sm">
-          <input id="newMenuPrice" type="number" placeholder="價格" class="w-full border rounded px-2 py-1 text-sm">
-          <select id="newMenuType" class="w-full border rounded px-2 py-1 text-sm">
-            <option value="food">食物</option>
-            <option value="drink">飲料</option>
-          </select>
-          <button onclick="addQuickMenu()" class="btn w-full bg-slate-800 text-white py-1 text-sm">加入</button>
-        </div>
+      <div id="quickMenu" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6"></div>
+      <div class="border-t border-gray-100 pt-5 grid grid-cols-1 sm:grid-cols-5 gap-3">
+        <input id="newMenuName" type="text" placeholder="品項名稱" class="sm:col-span-2 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#0071e3]">
+        <input id="newMenuPrice" type="number" placeholder="價格" class="border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#0071e3]">
+        <select id="newMenuType" class="border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#0071e3]">
+          <option value="food">食物</option>
+          <option value="drink">飲料</option>
+        </select>
+        <button onclick="addQuickMenu()" class="btn bg-[#1d1d1f] text-white py-3 text-sm sm:col-span-1">加入</button>
       </div>
     </div>
 
-    <div class="card p-4 mt-4">
-      <div class="flex justify-between mb-3">
-        <h2 class="font-semibold">飲料</h2>
-        <button onclick="addItem('drink')" class="btn bg-sky-500 text-white px-3 py-1 text-sm">+ 新增</button>
-      </div>
-      <div id="drinkList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-      <div class="lg:col-span-2"></div>
-      <div class="card p-4">
-        <div class="flex justify-between mb-2">
-          <h3 class="font-semibold">人員</h3>
-          <div class="flex gap-1">
-            <input id="newMember" placeholder="新增" class="w-20 border rounded px-2 py-1 text-sm">
-            <button onclick="addMember()" class="btn bg-slate-700 text-white px-2 py-1 text-sm">+</button>
-          </div>
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6 md:p-8">
+        <div class="flex justify-between items-center mb-5">
+          <h2 class="text-2xl font-semibold">食物</h2>
+          <button onclick="addItem('food')" class="btn bg-emerald-500 text-white px-4 py-2 text-sm">+ 新增</button>
         </div>
-        <div id="membersList"></div>
+        <div id="foodList" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+      </div>
+
+      <div class="card p-6 md:p-8">
+        <div class="flex justify-between items-center mb-5">
+          <h2 class="text-2xl font-semibold">飲料</h2>
+          <button onclick="addItem('drink')" class="btn bg-sky-500 text-white px-4 py-2 text-sm">+ 新增</button>
+        </div>
+        <div id="drinkList" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
       </div>
     </div>
 
-    <div class="mt-4 card p-4 text-center">
-      <div class="text-sm text-slate-500">總金額</div>
-      <div id="totalAmount" class="text-4xl font-bold my-1">$0</div>
-      <button onclick="clearAll()" class="btn bg-red-500 text-white px-4 py-2 text-sm mt-2">清空全部</button>
+    <div class="card p-6 md:p-8 mb-6">
+      <div class="flex justify-between items-center mb-5">
+        <h3 class="text-2xl font-semibold">人員</h3>
+        <div class="flex gap-2">
+          <input id="newMember" type="text" placeholder="新增人名" class="w-36 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-[#0071e3]">
+          <button onclick="addMember()" class="btn bg-[#1d1d1f] text-white px-4 py-2 text-sm">+</button>
+        </div>
+      </div>
+      <div id="membersList" class="min-h-[50px]"></div>
+      <p class="text-xs text-gray-400 mt-3">拖曳到商品上綁定（同一人最多4次）· 雙擊可刪除</p>
+    </div>
+
+    <div class="card p-8 text-center">
+      <div class="text-sm text-gray-500 mb-1">總金額</div>
+      <div id="totalAmount" class="text-6xl font-semibold tracking-tight my-2">$0</div>
+      <button onclick="clearAll()" class="btn bg-red-500 text-white px-8 py-3 text-sm mt-4">清空全部</button>
     </div>
   </div>
 
@@ -156,6 +209,7 @@ window.drinks = [];
 window.quickMenu = [];
 window.members = ['小明','小華'];
 window.isSaving = false;
+window.editing = {};
 
 async function saveToFirebase() {
   if (window.isSaving || !window.setDoc || !window.docRef) return;
@@ -179,23 +233,28 @@ async function saveToFirebase() {
 function calculateTotal() {
   let t = 0;
   [...window.foods, ...window.drinks].forEach(i => {
-    const qty = (i.people || []).length;
+    const qty = i.qty || (i.people || []).length;
     t += qty * (i.price || 0);
   });
   document.getElementById('totalAmount').textContent = '$' + t;
 }
 
 function updateStatus() {
-  const all = [...window.foods, ...window.drinks].filter(i => i.name && (i.people||[]).length);
+  const all = [...window.foods, ...window.drinks].filter(i => i.name && ((i.qty||0) > 0 || (i.people||[]).length > 0));
   document.getElementById('statusSummary').textContent = all.length
-    ? all.map(i => i.name + ' x' + (i.people||[]).length).join(' · ')
+    ? all.map(i => `${i.name} x${i.qty || (i.people||[]).length}`).join(' · ')
     : '目前還沒人點';
   calculateTotal();
 }
 
+function getNameCount(people, name) {
+  return people.filter(p => (typeof p === 'string' ? p : p.name) === name).length;
+}
+
 function renderItem(item, type, index, container) {
   const card = document.createElement('div');
-  card.className = 'item-card p-3';
+  card.className = 'item-card p-5';
+  const key = type + '-' + index;
   card.ondragover = e => { e.preventDefault(); card.classList.add('drag-over'); };
   card.ondragleave = () => card.classList.remove('drag-over');
   card.ondrop = e => {
@@ -205,43 +264,93 @@ function renderItem(item, type, index, container) {
     if (!name) return;
     const list = type === 'food' ? window.foods : window.drinks;
     if (!list[index].people) list[index].people = [];
-    if (!list[index].people.some(p => (typeof p === 'string' ? p : p.name) === name)) {
-      if (type === 'drink') {
-        list[index].people.push({ name, ice: [], sugar: [] });
-      } else {
-        list[index].people.push(name);
-      }
-      saveToFirebase();
-      renderAll();
+    const count = getNameCount(list[index].people, name);
+    if (count >= 4) {
+      alert('你他媽不怕撐死阿?');
+      return;
     }
+    if (type === 'drink') {
+      list[index].people.push({ name, ice: [], sugar: [] });
+    } else {
+      list[index].people.push(name);
+    }
+    if (list[index].manual !== true) {
+      list[index].qty = list[index].people.length;
+    }
+    saveToFirebase();
+    renderAll();
   };
 
   const people = item.people || [];
+  const qty = item.qty !== undefined ? item.qty : people.length;
   let peopleHtml = '';
   if (type === 'drink' && people.length) {
     peopleHtml = people.map((p, pi) => `
       <div class="person-line">
-        <div class="flex justify-between"><strong>${p.name}</strong><button onclick="removePerson('${type}',${index},${pi})" class="text-red-500 text-xs">✕</button></div>
-        <div>冰：${ICE_OPTS.map(o => `<label class="text-xs mr-1"><input type="checkbox" ${(p.ice||[]).includes(o)?'checked':''} onchange="toggleOpt(${index},${pi},'ice','${o}')">${o}</label>`).join('')}</div>
-        <div>糖：${SUGAR_OPTS.map(o => `<label class="text-xs mr-1"><input type="checkbox" ${(p.sugar||[]).includes(o)?'checked':''} onchange="toggleOpt(${index},${pi},'sugar','${o}')">${o}</label>`).join('')}</div>
+        <div class="flex justify-between items-center mb-1">
+          <strong>${p.name}</strong>
+          <button onclick="removePerson('${type}',${index},${pi})" class="text-red-500 text-xs px-1">✕</button>
+        </div>
+        <div class="text-xs">冰：${ICE_OPTS.map(o => `<label class="opt mr-2"><input type="checkbox" ${(p.ice||[]).includes(o)?'checked':''} onchange="toggleOpt(${index},${pi},'ice','${o}')">${o}</label>`).join('')}</div>
+        <div class="text-xs mt-1">糖：${SUGAR_OPTS.map(o => `<label class="opt mr-2"><input type="checkbox" ${(p.sugar||[]).includes(o)?'checked':''} onchange="toggleOpt(${index},${pi},'sugar','${o}')">${o}</label>`).join('')}</div>
       </div>`).join('');
   } else if (people.length) {
-    peopleHtml = people.map((p, pi) => `<span class="inline-block bg-slate-100 text-xs px-2 py-1 rounded-full mr-1">${typeof p==='string'?p:p.name} <button onclick="removePerson('${type}',${index},${pi})" class="text-red-500">×</button></span>`).join('');
+    peopleHtml = people.map((p, pi) => `<span class="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full mr-2 mb-1">${typeof p==='string'?p:p.name} <button onclick="removePerson('${type}',${index},${pi})" class="text-red-500 ml-1">×</button></span>`).join('');
   } else {
-    peopleHtml = '<div class="text-slate-400 text-xs mt-1">拖曳人員（數量 0）</div>';
+    peopleHtml = '<div class="text-gray-400 text-xs mt-2">拖曳人員到這裡</div>';
   }
 
+  const isEditing = window.editing[key];
+
   card.innerHTML = `
-    <div class="flex justify-between gap-2">
+    <div class="flex justify-between items-start gap-3">
       <div class="flex-1">
-        <input value="${item.name||''}" placeholder="品項" onchange="updateField('${type}',${index},'name',this.value)" class="w-full border rounded px-2 py-1 text-sm mb-1">
-        <div class="text-xs">單價 <input type="number" value="${item.price||0}" onchange="updateField('${type}',${index},'price',parseInt(this.value)||0)" class="w-16 border rounded px-1">　數量 ${people.length}</div>
+        <input type="text" value="${item.name||''}" placeholder="品項名稱" onchange="updateField('${type}',${index},'name',this.value)" class="w-full border border-gray-200 rounded-xl px-4 py-2 text-base font-medium mb-2 focus:outline-none focus:border-[#0071e3]">
+        <div class="flex items-center gap-4 text-sm text-gray-600 mb-1">
+          <span>單價 <input type="number" value="${item.price||0}" min="0" onchange="updateField('${type}',${index},'price',parseInt(this.value)||0)" class="w-16 border border-gray-200 rounded-lg px-2 py-1"></span>
+          <span class="font-medium text-gray-800">數量 ${qty}${item.manual ? ' (已鎖定)' : ''}</span>
+        </div>
+        <div class="edit-qty ${isEditing ? 'active' : ''} items-center gap-2 mt-2">
+          <input type="number" id="edit-qty-${key}" value="${qty}" min="0" class="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm">
+          <button onclick="saveQty('${type}',${index})" class="btn bg-[#0071e3] text-white px-4 py-1 text-xs">儲存</button>
+          <button onclick="cancelEdit('${key}')" class="text-xs text-gray-500">取消</button>
+        </div>
       </div>
-      <button onclick="removeItem('${type}',${index})" class="text-red-500 text-xs">刪除</button>
+      <div class="flex flex-col gap-1">
+        <button onclick="removeItem('${type}',${index})" class="text-red-500 text-xs px-2">刪除</button>
+        <button onclick="startEdit('${key}')" class="text-[#0071e3] text-xs px-2">編輯</button>
+      </div>
     </div>
-    <div class="mt-2">${peopleHtml}</div>
+    <div class="mt-3">${peopleHtml}</div>
   `;
   container.appendChild(card);
+}
+
+function startEdit(key) {
+  window.editing[key] = true;
+  renderAll();
+}
+
+function cancelEdit(key) {
+  delete window.editing[key];
+  renderAll();
+}
+
+function saveQty(type, index) {
+  const key = type + '-' + index;
+  const input = document.getElementById('edit-qty-' + key);
+  const list = type === 'food' ? window.foods : window.drinks;
+  const min = list[index].people.length;
+  let val = parseInt(input.value);
+  if (isNaN(val) || val < min) {
+    alert('數量不能小於已綁定的人數（' + min + '）');
+    val = min;
+  }
+  list[index].qty = val;
+  list[index].manual = true;
+  delete window.editing[key];
+  saveToFirebase();
+  renderAll();
 }
 
 function renderAll() {
@@ -256,7 +365,13 @@ function renderAll() {
   qm.innerHTML = '';
   (window.quickMenu||[]).forEach((item,i) => {
     const bg = item.type === 'drink' ? 'bg-sky-500' : 'bg-emerald-500';
-    qm.innerHTML += `<div class="relative"><button class="btn ${bg} text-white w-full py-2 text-xs" onclick="addFromMenu(${i})">${item.name} $${item.price}</button><button onclick="removeQuick(${i})" class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs">×</button></div>`;
+    const wrap = document.createElement('div');
+    wrap.className = 'relative';
+    wrap.innerHTML = `
+      <button class="btn ${bg} text-white w-full py-4 text-base font-medium" onclick="addFromMenu(${i})">${item.name}<div class="text-xs opacity-90 mt-1">$${item.price}</div></button>
+      <button onclick="removeQuick(${i})" class="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs leading-none flex items-center justify-center">×</button>
+    `;
+    qm.appendChild(wrap);
   });
 
   const ml = document.getElementById('membersList');
@@ -265,14 +380,30 @@ function renderAll() {
     const chip = document.createElement('div');
     chip.className = 'name-chip';
     chip.draggable = true;
-    chip.textContent = name;
-    chip.ondragstart = e => { e.dataTransfer.setData('text/plain', name); };
-    chip.ondblclick = () => { if(confirm('刪除 '+name+'?')){ window.members.splice(i,1); saveToFirebase(); renderAll(); } };
+    chip.innerHTML = `${name} <span class="text-gray-300 text-xs" onclick="event.stopPropagation(); editMember(${i})">✎</span>`;
+    chip.ondragstart = e => { e.dataTransfer.setData('text/plain', name); chip.style.opacity = '0.6'; };
+    chip.ondragend = () => chip.style.opacity = '1';
+    chip.ondblclick = () => {
+      if (confirm(`刪除 ${name}？`)) {
+        window.members.splice(i, 1);
+        saveToFirebase();
+        renderAll();
+      }
+    };
     ml.appendChild(chip);
   });
   updateStatus();
 }
 window.renderAll = renderAll;
+
+function editMember(i) {
+  const newName = prompt('編輯人名', window.members[i]);
+  if (newName && newName.trim() && !window.members.includes(newName.trim())) {
+    window.members[i] = newName.trim();
+    saveToFirebase();
+    renderAll();
+  }
+}
 
 function updateField(type, index, field, value) {
   const list = type === 'food' ? window.foods : window.drinks;
@@ -292,12 +423,15 @@ function toggleOpt(index, pIndex, cat, opt) {
 function removePerson(type, itemIndex, personIndex) {
   const list = type === 'food' ? window.foods : window.drinks;
   list[itemIndex].people.splice(personIndex, 1);
+  if (list[itemIndex].manual !== true) {
+    list[itemIndex].qty = list[itemIndex].people.length;
+  }
   saveToFirebase();
   renderAll();
 }
 
 function addItem(type, name='', price=0) {
-  const item = { name, price, qty: 0, people: [] };
+  const item = { name, price, qty: 0, people: [], manual: false };
   (type === 'food' ? window.foods : window.drinks).push(item);
   saveToFirebase();
   renderAll();
@@ -343,7 +477,7 @@ function addMember() {
 }
 
 function clearAll() {
-  if (confirm('確定清空？')) {
+  if (confirm('確定清空全部？')) {
     window.foods = [];
     window.drinks = [];
     saveToFirebase();
